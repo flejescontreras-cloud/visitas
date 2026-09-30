@@ -240,7 +240,7 @@ tbody tr.link{cursor:pointer}tbody tr.link:hover td{background:var(--superficie-
     <ol>
       <li>Al abrir la visita se registran <strong>fecha, hora y ubicación GPS</strong> del asesor de forma automática.</li>
       <li>Diligencie los datos del cliente, el producto ofrecido y el resultado.</li>
-      <li>Firme y cierre la visita. <strong>Una vez cerrada no se puede modificar ni borrar.</strong></li>
+      <li>Firme y cierre la visita. <strong>Una vez cerrada no se puede modificar ni borrar.</strong> Si la abrió por error o no la va a terminar, use <strong>Cancelar visita</strong> (se borra sin dejar registro).</li>
     </ol>
     <button class="btn btn-p" id="btnAbrir"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Abrir visita</button>
     <div id="msgAbrir" class="ayuda"></div>
@@ -283,7 +283,7 @@ tbody tr.link{cursor:pointer}tbody tr.link:hover td{background:var(--superficie-
       </div>
       <div class="acciones">
         <span class="autosave" id="autosave">Los cambios se guardan automáticamente en la hoja mientras la visita esté abierta.</span>
-        <button type="button" class="btn btn-s peligro" id="btnAnular">Anular visita</button>
+        <button type="button" class="btn btn-s peligro" id="btnCancelar">Cancelar visita</button>
         <button type="button" class="btn btn-n" id="btnCerrar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>Cerrar visita</button>
       </div>
     </form>
@@ -409,43 +409,12 @@ function pedirAsesor(obligatorio){
   return new Promise(res=>{
     modal(`<h3>¿Quién es el asesor?</h3><p class="ayuda">Seleccione su nombre. Quedará registrado en cada visita que abra desde este dispositivo.</p>
       <div class="lista" style="margin:12px 0">${ASESORES.map(a=>`<button type="button" class="fila opc-asesor ${a===asesor?'sel':''}" data-a="${esc(a)}"><span class="ini">${esc(a.split(' ').map(w=>w[0]).slice(0,2).join(''))}</span><span class="emp">${esc(a)}</span><span class="chk">${a===asesor?'✓':''}</span></button>`).join('')}</div>
-      <div class="acciones" style="justify-content:flex-start"><button type="button" class="btn btn-s" id="btnCambiarClave">Cambiar contraseña de administrador</button><button type="button" class="btn btn-s peligro" id="btnReiniciar">Borrar todas las visitas (admin)</button>${obligatorio?'':'<button class="btn btn-s" data-x style="margin-left:auto">Cancelar</button>'}</div>`,{cerrable:!obligatorio});
-    $('#btnCambiarClave').onclick=cambiarClave; $('#btnReiniciar').onclick=reiniciarBase;
+      ${obligatorio?'':'<div class="acciones"><button class="btn btn-s" data-x>Cancelar</button></div>'}`,{cerrable:!obligatorio});
     $$('.opc-asesor').forEach(b=>b.onclick=()=>{ asesor=b.dataset.a; LS.set('fc_asesor',asesor); pintarAsesor(); cerrarModal(); renderTodo(); res(asesor); });
   });
 }
 $('#btnAsesor').onclick=()=>pedirAsesor(false);
-function pedirClave(titulo,texto){
-  return new Promise(res=>{
-    modal(`<h3>${titulo}</h3><p class="ayuda">${texto}</p><label class="campo"><span>Contraseña de administrador</span><input type="password" id="inClave" autocomplete="current-password"></label><div class="ayuda" id="msgClave" style="color:var(--error)"></div>
-      <div class="acciones"><button class="btn btn-s" data-x>Cancelar</button><button class="btn btn-n" id="okClave">Confirmar</button></div>`);
-    $('#modales .modal').addEventListener('click',e=>{ if(e.target.closest('[data-x]')||e.target===e.currentTarget)res(null); });
-    const inp=$('#inClave'); setTimeout(()=>inp.focus(),50);
-    const ok=()=>{ const v=inp.value; if(!v)return; cerrarModal(); res(v); };
-    $('#okClave').onclick=ok; inp.onkeydown=e=>{ if(e.key==='Enter')ok(); };
-  });
-}
-async function eliminarVisita(id){
-  const v=visitas.find(x=>x.id===id); if(!v)return;
-  const clave=await pedirClave('Eliminar visita','Esta acción borra definitivamente la visita <strong>'+esc(v.empresa||'sin nombre')+'</strong> del '+fFechaHora(v.apertura)+' (y su foto y firma). Solo el administrador puede hacerlo.');
-  if(!clave)return;
-  try{ await srv('eliminarVisita',id,clave); visitas=visitas.filter(x=>x.id!==id); renderTodo(); toast('Visita eliminada'); }
-  catch(e){ toast(e.message,true); }
-}
-async function reiniciarBase(){
-  const clave=await pedirClave('Borrar todas las visitas','Se eliminarán <strong>todas</strong> las visitas, la base de clientes y sus fotos/firmas en Drive para empezar de cero. Esta acción no se puede deshacer.');
-  if(!clave)return;
-  try{ const r=await srv('reiniciarBase',clave); visitas=[]; clientes={}; abierta=null; LS.set('fc_borrador',null); LS.set('fc_cache',null); renderTodo(); toast('Base reiniciada: '+r.visitas+' visitas y '+r.clientes+' clientes borrados'); cargarDatos(); }
-  catch(e){ toast(e.message,true); }
-}
-function cambiarClave(){
-  modal(`<h3>Cambiar contraseña</h3><p class="ayuda">La contraseña de administrador es la que se pide para eliminar visitas. Es la misma para todos los dispositivos.</p>
-    <div class="grid"><label class="campo full"><span>Contraseña actual</span><input type="password" id="cl0"></label><label class="campo"><span>Nueva contraseña</span><input type="password" id="cl1"></label><label class="campo"><span>Repetir nueva</span><input type="password" id="cl2"></label></div>
-    <div class="ayuda" id="msgCl" style="color:var(--error)"></div><div class="acciones"><button class="btn btn-s" data-x>Cancelar</button><button class="btn btn-n" id="okCl">Guardar</button></div>`);
-  $('#okCl').onclick=async()=>{ const a=$('#cl0').value,b=$('#cl1').value,c=$('#cl2').value, m=$('#msgCl');
-    if(b!==c){ m.textContent='Las contraseñas nuevas no coinciden.'; return; }
-    try{ await srv('cambiarClave',a,b); cerrarModal(); toast('Contraseña actualizada'); }catch(e){ m.textContent=e.message; } };
-}
+/* (Sin funciones de borrado: las visitas cerradas son inmutables; solo se puede cancelar una visita abierta desde el formulario.) */
 
 /* ---------- Modales y avisos ---------- */
 function modal(html,op={}){ cerrarModal(); const m=document.createElement('div'); m.className='modal'; m.innerHTML=`<div class="caja" role="dialog" aria-modal="true">${html}</div>`;
@@ -464,7 +433,13 @@ setInterval(()=>{const d=new Date();$('#reloj').textContent=fFechaHora(d.toISOSt
 
 /* ---------- Visita abierta ---------- */
 let abierta=null; const form=$('#form'); let autosaveT=null;
-function visitaAbiertaActual(){ return visitas.find(v=>v.estado==='abierta'&&v.asesor===asesor&&v.dispositivo===dispositivoId())||null; }
+/* Visita abierta del asesor: primero la de este dispositivo; si no hay, cualquiera abierta a su nombre (la más antigua),
+   para que pueda continuarla y cerrarla aunque cambie de navegador o de enlace. */
+function visitaAbiertaActual(){
+  if(!asesor)return null; const mias=visitas.filter(v=>v.estado==='abierta'&&v.asesor===asesor);
+  let v=mias.find(x=>x.dispositivo===dispositivoId()); if(!v){ mias.sort((a,b)=>String(a.apertura).localeCompare(String(b.apertura))); v=mias[0]||null; if(v){ v.dispositivo=dispositivoId(); } }
+  return v;
+}
 function restaurarBorrador(){ const b=LS.get('fc_borrador'); if(b&&b.estado==='abierta'&&b.dispositivo===dispositivoId()&&!visitas.some(v=>v.id===b.id))visitas.push(b); }
 function dispositivoId(){ let d=LS.get('fc_disp'); if(!d){d=uid();LS.set('fc_disp',d);} return d; }
 function gpsPermitidoPorVisor(){ try{ const pp=document.permissionsPolicy||document.featurePolicy; if(pp&&pp.allowsFeature) return pp.allowsFeature('geolocation'); }catch(e){} return true; }
@@ -567,7 +542,7 @@ $('#btnCerrar').onclick=async()=>{
   if(!abierta)return; leerForm();
   const faltan=[]; if(!abierta.empresa)faltan.push('empresa u obra'); if(!abierta.atiende)faltan.push('nombre de quien atiende'); if(!abierta.tipoCliente)faltan.push('tipo de cliente');
   if(!abierta.objeto)faltan.push('objeto de la visita'); if(!abierta.producto)faltan.push('producto ofrecido'); if(!abierta.venta)faltan.push('¿se logró la venta?');
-  if(abierta.venta==='Sí'&&!(abierta.valor>0))faltan.push('valor de la venta'); if(!abierta.foto)faltan.push('foto de la fachada'); if(!abierta.firma)faltan.push('firma del vendedor');
+  if(abierta.venta==='Sí'&&!(abierta.valor>0))faltan.push('valor de la venta'); if(!abierta.foto&&!abierta.fotoId)faltan.push('foto de la fachada'); if(!abierta.firma&&!abierta.firmaId)faltan.push('firma del vendedor');
   if(faltan.length){ toast('Falta: '+faltan.join(', '),true); return; }
   const ok=await confirmar('Cerrar la visita','Se registrará la hora de cierre y la visita quedará <strong>bloqueada</strong>: no podrá modificarse ni borrarse. ¿Desea continuar?','Sí, cerrar visita');
   if(!ok)return;
@@ -577,10 +552,12 @@ $('#btnCerrar').onclick=async()=>{
   catch(e){ v.estado='abierta'; v.cierre=null; toast(e.message,true); }
   finally{ btn.disabled=false; }
 };
-$('#btnAnular').onclick=async()=>{
-  if(!abierta)return; const ok=await confirmar('Anular la visita','La visita quedará marcada como <strong>anulada</strong> en el historial (no se elimina). Úselo solo si se abrió por error.','Anular',true);
-  if(!ok)return; clearTimeout(autosaveT); leerForm(); const v=abierta; v.estado='anulada'; v.cierre=new Date().toISOString();
-  try{ await guardarVisita(v); abierta=null; LS.set('fc_borrador',null); renderTodo(); toast('Visita anulada'); }catch(e){ v.estado='abierta'; v.cierre=null; toast(e.message,true); }
+$('#btnCancelar').onclick=async()=>{
+  if(!abierta)return; const ok=await confirmar('Cancelar la visita','La visita se <strong>borrará por completo</strong> (no quedará ningún registro). Úselo si se abrió por error o no se va a terminar.','Sí, cancelar visita',true);
+  if(!ok)return; clearTimeout(autosaveT); const v=abierta; const btn=$('#btnCancelar'); btn.disabled=true;
+  try{ await srv('cancelarVisita',v.id); visitas=visitas.filter(x=>x.id!==v.id); abierta=null; LS.set('fc_borrador',null); renderTodo(); toast('Visita cancelada'); }
+  catch(e){ toast(e.message,true); }
+  finally{ btn.disabled=false; }
 };
 
 /* ---------- Historial ---------- */
@@ -614,9 +591,8 @@ function verVisita(id){
   <div style="grid-column:1/-1"><div class="k">Observaciones</div><div class="v obs">${esc(v.observaciones)||'—'}</div></div>
   <div style="grid-column:1/-1"><div class="k">Foto de la fachada</div><div class="v" id="detFoto">${v.fotoId?'<span class="ayuda">Cargando foto…</span>':'—'}</div></div>
   <div style="grid-column:1/-1"><div class="k">Firma del vendedor</div><div class="v" id="detFirma">${v.firmaId?'<span class="ayuda">Cargando firma…</span>':'—'}</div></div></div>
-  ${v.estado==='cerrada'?'<p class="ayuda">🔒 Registro cerrado: no admite cambios. Solo el administrador puede eliminarlo con contraseña.</p>':''}
-  <div class="acciones">${v.estado!=='abierta'?'<button class="btn btn-s peligro" id="btnElimVisita" style="margin-right:auto">Eliminar visita</button>':''}<button class="btn btn-n" data-x>Cerrar</button></div>`);
-  const be=$('#btnElimVisita'); if(be)be.onclick=()=>eliminarVisita(v.id);
+  ${v.estado==='cerrada'?'<p class="ayuda">🔒 Registro cerrado: no admite cambios ni se puede borrar.</p>':''}
+  <div class="acciones"><button class="btn btn-n" data-x>Cerrar</button></div>`);
   if(v.fotoId)imagen(v.fotoId).then(d=>{ const el=$('#detFoto'); if(el)el.innerHTML=d?`<img class="foto-det" src="${d}" alt="Fachada">`:'<span class="ayuda">No disponible</span>'; });
   if(v.firmaId)imagen(v.firmaId).then(d=>{ const el=$('#detFirma'); if(el)el.innerHTML=d?`<img class="firma-img" src="${d}" alt="Firma">`:'<span class="ayuda">No disponible</span>'; });
 }
